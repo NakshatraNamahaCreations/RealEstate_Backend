@@ -201,44 +201,6 @@ exports.getallpropertyEnquiries = async (req, res) => {
   }
 };
 
-// exports.getEnquiryByUserIdAndCustomerId = async (req, res) => {
-//   try {
-//     const { userId, customerId } = req.params;
-
-//     if (!userId || !customerId) {
-//       return res
-//         .status(400)
-//         .json({ message: "userId and customerId are required." });
-//     }
-
-//     const enquiries = await Enquiry.find({ userId }).populate({
-//       path: "propertyId",
-//       model: Property,
-//       match: { customerId: customerId },
-//     });
-
-//     const validEnquiries = enquiries.filter(
-//       (enquiry) => enquiry.propertyId !== null
-//     );
-
-//     if (!validEnquiries.length) {
-//       return res.status(404).json({
-//         message: "No enquiries found for the given userId and customerId.",
-//       });
-//     }
-
-//     res.status(200).json({
-//       message: "Enquiries and associated properties fetched successfully",
-//       data: validEnquiries,
-//     });
-//   } catch (error) {
-//     console.error("Error fetching enquiries by userId and customerId:", error);
-//     res.status(500).json({
-//       message: "Failed to fetch enquiries - " + error.message,
-//     });
-//   }
-// };
-
 exports.getEnquiriesByCustomerId = async (req, res) => {
   try {
     const { customerId } = req.params;

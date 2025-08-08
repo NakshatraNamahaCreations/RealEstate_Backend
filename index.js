@@ -33,7 +33,7 @@ app.use("/api/admin", AdminuserRoute);
 app.use("/api/enquiry", EnquiryRoute);
 app.use("/api", userRoute);
 
-const PORT = process.env.CONTENT_PORT || 8001;
+const PORT = 8001;
 const MONGO_URI = process.env.CONTENT_MONGO_URI;
 
 mongoose
