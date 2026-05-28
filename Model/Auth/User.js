@@ -8,6 +8,8 @@ const UserSchema = new mongoose.Schema({
   gender: { type: String, required: true },
   professional: { type: String, required: true },
   socialmedialink: { type: String, required: true },
+  resetPasswordToken: { type: String },
+  resetPasswordExpires: { type: Date },
 });
 
 const User = mongoose.model("User", UserSchema);

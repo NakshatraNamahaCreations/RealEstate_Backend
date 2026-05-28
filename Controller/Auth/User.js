@@ -1,5 +1,10 @@
 const User = require("../../Model/Auth/User");
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
+const { sendPasswordResetEmail } = require("../../Utils/mailer");
+
+const hashToken = (token) =>
+  crypto.createHash("sha256").update(token).digest("hex");
 
 class UserController {
   async UserSignup(req, res) {
@@ -125,6 +130,96 @@ class UserController {
       });
     } catch (error) {
       console.error("Error updating user:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  }
+
+  async forgotPassword(req, res) {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ message: "Email is required." });
+      }
+
+      const user = await User.findOne({ email });
+
+      // Always respond the same way to avoid leaking which emails exist.
+      const genericResponse = {
+        message:
+          "If an account with that email exists, a reset link has been sent.",
+      };
+
+      if (!user) {
+        return res.status(200).json(genericResponse);
+      }
+
+      const resetToken = crypto.randomBytes(32).toString("hex");
+      await User.updateOne(
+        { _id: user._id },
+        {
+          resetPasswordToken: hashToken(resetToken),
+          resetPasswordExpires: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
+        }
+      );
+
+      const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+
+      try {
+        await sendPasswordResetEmail(user.email, resetUrl);
+      } catch (mailError) {
+        console.error("Error sending reset email:", mailError);
+        await User.updateOne(
+          { _id: user._id },
+          { $unset: { resetPasswordToken: "", resetPasswordExpires: "" } }
+        );
+        return res
+          .status(500)
+          .json({ message: "Failed to send reset email. Try again later." });
+      }
+
+      return res.status(200).json(genericResponse);
+    } catch (error) {
+      console.error("Error in forgotPassword:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  }
+
+  async resetPassword(req, res) {
+    try {
+      const { token, password } = req.body;
+
+      if (!token || !password) {
+        return res
+          .status(400)
+          .json({ message: "Token and new password are required." });
+      }
+
+      const user = await User.findOne({
+        resetPasswordToken: hashToken(token),
+        resetPasswordExpires: { $gt: new Date() },
+      });
+
+      if (!user) {
+        return res
+          .status(400)
+          .json({ message: "Reset token is invalid or has expired." });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      await User.updateOne(
+        { _id: user._id },
+        {
+          password: hashedPassword,
+          $unset: { resetPasswordToken: "", resetPasswordExpires: "" },
+        }
+      );
+
+      return res
+        .status(200)
+        .json({ message: "Password has been reset successfully." });
+    } catch (error) {
+      console.error("Error in resetPassword:", error);
       return res.status(500).json({ message: "Internal server error" });
     }
   }
