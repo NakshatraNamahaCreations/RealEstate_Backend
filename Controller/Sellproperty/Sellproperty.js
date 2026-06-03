@@ -101,38 +101,98 @@ exports.createProperty = async (req, res) => {
 
 exports.updateProperty = async (req, res) => {
   const { id } = req.params;
+  const customerId = req.body.customerId || req.query.customerId;
   try {
-    const imagePaths = req.files
-      ? req.files.map((file) => file.path)
-      : undefined;
-    const updatedProperty = await Property.findByIdAndUpdate(
-      id,
-      {
-        ...req.body,
-        propertyimage: imagePaths ? imagePaths : undefined,
-      },
-      { new: true }
-    );
-    if (!updatedProperty) {
+    if (!customerId) {
+      return res
+        .status(400)
+        .json({ message: "customerId is required to edit a property" });
+    }
+
+    const property = await Property.findById(id);
+    if (!property) {
       return res.status(404).json({ message: "Property not found to update" });
     }
+    if (property.customerId !== customerId) {
+      return res
+        .status(403)
+        .json({ message: "You are not allowed to edit this property" });
+    }
+
+    const propertyData = { ...req.body };
+
+    // Multipart form sends nested objects/arrays as JSON strings — parse them.
+    ["amenities", "nearbyplace", "googleaddress", "occupancy_type", "profession_Type"].forEach(
+      (field) => {
+        if (propertyData[field] && typeof propertyData[field] === "string") {
+          try {
+            propertyData[field] = JSON.parse(propertyData[field]);
+          } catch (e) {
+            // leave as-is; will surface as a clearer cast error below
+          }
+        }
+      }
+    );
+
+    // Image handling: kept images (from client) + newly uploaded files.
+    const hasExistingImagesField = "existingImages" in propertyData;
+    let keptImages = [];
+    if (hasExistingImagesField) {
+      const raw = propertyData.existingImages;
+      try {
+        keptImages = typeof raw === "string" ? JSON.parse(raw) : raw || [];
+      } catch (e) {
+        keptImages = [];
+      }
+    }
+    delete propertyData.existingImages;
+
+    const newImages = req.files ? req.files.map((file) => file.path) : [];
+
+    if (hasExistingImagesField) {
+      propertyData.propertyimage = [...keptImages, ...newImages];
+    } else if (newImages.length > 0) {
+      propertyData.propertyimage = newImages;
+    } else {
+      delete propertyData.propertyimage;
+    }
+
+    const updatedProperty = await Property.findByIdAndUpdate(id, propertyData, {
+      new: true,
+    });
     res.status(200).json({
       message: "Property updated successfully",
       property: updatedProperty,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Error updating property" });
+    console.error("Update Property Error:", error);
+    res
+      .status(500)
+      .json({ message: "Error updating property", error: error.message });
   }
 };
 
 exports.deleteProperty = async (req, res) => {
   const { id } = req.params;
+  const customerId = req.body.customerId || req.query.customerId;
   try {
-    const deletedProperty = await Property.findByIdAndDelete(id);
-    if (!deletedProperty) {
+    if (!customerId) {
+      return res
+        .status(400)
+        .json({ message: "customerId is required to delete a property" });
+    }
+
+    const property = await Property.findById(id);
+    if (!property) {
       return res.status(404).json({ message: "Property not found to delete" });
     }
+    if (property.customerId !== customerId) {
+      return res
+        .status(403)
+        .json({ message: "You are not allowed to delete this property" });
+    }
+
+    await Property.findByIdAndDelete(id);
     res.status(200).json({ message: "Property deleted successfully" });
   } catch (error) {
     console.error(error);
