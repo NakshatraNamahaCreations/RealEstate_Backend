@@ -1,6 +1,7 @@
 const express = require("express");
 const multer = require("multer");
 const path = require("path");
+const { propertyStorage } = require("../../Utils/cloudinary");
 const {
   getAllProperties,
   getPropertyById,
@@ -18,19 +19,8 @@ const {
 
 const allowedExtensions = [".jpg", ".jpeg", ".png", ".webp", ".gif"];
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "Public/sellproperty");
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const fileName = `${Date.now()}${ext}`;
-    cb(null, fileName);
-  },
-});
-
 const upload = multer({
-  storage: storage,
+  storage: propertyStorage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
