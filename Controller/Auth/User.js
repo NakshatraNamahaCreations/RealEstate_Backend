@@ -103,7 +103,7 @@ class UserController {
   async updateUser(req, res) {
     try {
       const { userId } = req.params;
-      const { gender, professional, socialmedialink } = req.body;
+      const { userName, email, gender, professional, socialmedialink } = req.body;
 
       const user = await User.findById(userId);
 
@@ -111,6 +111,10 @@ class UserController {
         return res.status(404).json({ message: "User not found." });
       }
 
+      // userName/email are set here as part of the post-OTP "complete profile"
+      // step; the remaining fields come from later profile edits.
+      if (userName) user.userName = userName;
+      if (email) user.email = email;
       if (gender) user.gender = gender;
       if (professional) user.professional = professional;
       if (socialmedialink) user.socialmedialink = socialmedialink;
@@ -118,8 +122,10 @@ class UserController {
       await user.save();
 
       return res.status(200).json({
+        status: true,
         message: "User updated successfully!",
         data: {
+          id: user._id,
           userName: user.userName,
           email: user.email,
           phonenumber: user.phonenumber,
@@ -221,6 +227,36 @@ class UserController {
     } catch (error) {
       console.error("Error in resetPassword:", error);
       return res.status(500).json({ message: "Internal server error" });
+    }
+  }
+
+  // Register an FCM device token for push notifications. Idempotent — the same
+  // token is stored at most once ($addToSet).
+  async saveFcmToken(req, res) {
+    try {
+      const { userId, token } = req.body;
+
+      if (!userId || !token) {
+        return res
+          .status(400)
+          .json({ status: false, message: "userId and token are required." });
+      }
+
+      const result = await User.updateOne(
+        { _id: userId },
+        { $addToSet: { fcmTokens: token } }
+      );
+
+      if (result.matchedCount === 0) {
+        return res.status(404).json({ status: false, message: "User not found." });
+      }
+
+      return res.status(200).json({ status: true, message: "Token saved." });
+    } catch (error) {
+      console.error("Error in saveFcmToken:", error);
+      return res
+        .status(500)
+        .json({ status: false, message: "Internal server error" });
     }
   }
 }

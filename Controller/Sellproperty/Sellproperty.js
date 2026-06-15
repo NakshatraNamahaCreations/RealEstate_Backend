@@ -1,5 +1,19 @@
 const Property = require("../../Model/Sellproperty/Sellproperty");
+const Enquiry = require("../../Model/Enquiry/Enquiry");
+const Favorite = require("../../Model/Sellproperty/Favorite.js");
+const { cloudinary } = require("../../Utils/cloudinary");
 const moment = require("moment");
+
+// Derive a Cloudinary public_id (e.g. "30forty/sellproperty/123-456") from a
+// stored secure URL so the asset can be removed when its property is deleted.
+const cloudinaryPublicIdFromUrl = (url) => {
+  try {
+    const match = String(url).match(/\/upload\/(?:v\d+\/)?(.+)\.[a-zA-Z0-9]+$/);
+    return match ? match[1] : null;
+  } catch (_) {
+    return null;
+  }
+};
 
 exports.getAllProperties = async (req, res) => {
   try {
@@ -192,8 +206,34 @@ exports.deleteProperty = async (req, res) => {
         .json({ message: "You are not allowed to delete this property" });
     }
 
+    // Remove the property and all data that references it.
     await Property.findByIdAndDelete(id);
-    res.status(200).json({ message: "Property deleted successfully" });
+
+    const [enquiryResult, favoriteResult] = await Promise.all([
+      Enquiry.deleteMany({ propertyId: id }),
+      Favorite.deleteMany({ propertyId: id }),
+    ]);
+
+    // Best-effort cleanup of the listing's images from Cloudinary; never let an
+    // image-delete failure fail the whole operation.
+    try {
+      const publicIds = (property.propertyimage || [])
+        .map(cloudinaryPublicIdFromUrl)
+        .filter(Boolean);
+      await Promise.all(
+        publicIds.map((pid) => cloudinary.uploader.destroy(pid))
+      );
+    } catch (imgErr) {
+      console.error("Cloudinary cleanup failed:", imgErr.message);
+    }
+
+    res.status(200).json({
+      message: "Property deleted successfully",
+      deleted: {
+        enquiries: enquiryResult.deletedCount,
+        favorites: favoriteResult.deletedCount,
+      },
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error deleting property" });

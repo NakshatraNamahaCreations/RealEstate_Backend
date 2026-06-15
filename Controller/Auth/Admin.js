@@ -1,5 +1,6 @@
 const adminUser = require("../../Model/Auth/Admin");
 const bcrypt = require("bcrypt");
+const { sendToTopic } = require("../../Utils/fcm");
 
 class UserController {
   async AdminUserSignup(req, res) {
@@ -89,6 +90,35 @@ class UserController {
       res
         .status(500)
         .json({ message: "Failed to get all user - " + e.message });
+    }
+  }
+
+  // Broadcast a push notification to every device subscribed to the "all"
+  // topic. NOTE: unprotected, consistent with the other admin endpoints.
+  async broadcast(req, res) {
+    try {
+      const { title, body } = req.body;
+
+      if (!title || !body) {
+        return res
+          .status(400)
+          .json({ status: false, message: "title and body are required." });
+      }
+
+      await sendToTopic("all", {
+        title,
+        body,
+        data: { type: "broadcast" },
+      });
+
+      return res
+        .status(200)
+        .json({ status: true, message: "Broadcast sent." });
+    } catch (error) {
+      console.error("Error in broadcast:", error);
+      return res
+        .status(500)
+        .json({ status: false, message: "Internal server error" });
     }
   }
 }

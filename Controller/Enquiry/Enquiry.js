@@ -1,6 +1,7 @@
 const Enquiry = require("../../Model/Enquiry/Enquiry");
 const Property = require("../../Model/Sellproperty/Sellproperty");
 const User = require("../../Model/Auth/User");
+const { sendToUser } = require("../../Utils/fcm");
 
 exports.createEnquiry = async (req, res) => {
   try {
@@ -18,6 +19,21 @@ exports.createEnquiry = async (req, res) => {
     });
 
     await newEnquiry.save();
+
+    // Notify the property owner about the new enquiry (best-effort).
+    try {
+      const property = await Property.findById(propertyId).select("customerId");
+      if (property && property.customerId) {
+        await sendToUser(property.customerId, {
+          title: "New enquiry",
+          body: `${userName} enquired about your property`,
+          data: { type: "new_enquiry", propertyId: String(propertyId) },
+        });
+      }
+    } catch (notifyErr) {
+      console.error("Enquiry notification failed:", notifyErr.message);
+    }
+
     res
       .status(200)
       .json({ message: "Enquiry created successfully!", data: newEnquiry });
@@ -94,6 +110,13 @@ exports.acceptEnquiry = async (req, res) => {
       return res.status(404).json({ message: "Enquiry not found." });
     }
 
+    // Notify the enquirer that their enquiry was accepted (best-effort).
+    sendToUser(updatedEnquiry.userId, {
+      title: "Enquiry accepted",
+      body: "Your enquiry has been accepted.",
+      data: { type: "enquiry_status", enquiryId: String(updatedEnquiry._id), accepted: true },
+    });
+
     res.status(200).json({
       message: "Enquiry accepted successfully",
       data: updatedEnquiry,
@@ -119,6 +142,13 @@ exports.rejectEnquiry = async (req, res) => {
     if (!updatedEnquiry) {
       return res.status(404).json({ message: "Enquiry not found." });
     }
+
+    // Notify the enquirer that their enquiry was declined (best-effort).
+    sendToUser(updatedEnquiry.userId, {
+      title: "Enquiry declined",
+      body: "Your enquiry has been declined.",
+      data: { type: "enquiry_status", enquiryId: String(updatedEnquiry._id), accepted: false },
+    });
 
     res.status(200).json({
       message: "Enquiry rejected successfully",

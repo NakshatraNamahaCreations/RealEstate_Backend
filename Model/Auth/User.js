@@ -1,15 +1,20 @@
 const mongoose = require("mongoose");
 
 const UserSchema = new mongoose.Schema({
-  userName: { type: String, required: true },
-  phonenumber: { type: Number, required: true },
-  email: { type: String, required: true },
-  password: { type: String, required: true },
-  gender: { type: String, required: true },
-  professional: { type: String, required: true },
-  socialmedialink: { type: String, required: true },
+  // Phone is now the primary identity (OTP login). It is the only required
+  // field; the rest are collected progressively (name after OTP, the others
+  // via profile updates).
+  phonenumber: { type: Number, required: true, unique: true },
+  userName: { type: String },
+  email: { type: String },
+  password: { type: String },
+  gender: { type: String },
+  professional: { type: String },
+  socialmedialink: { type: String },
   resetPasswordToken: { type: String },
   resetPasswordExpires: { type: Date },
+  // FCM device tokens (one per device) for push notifications.
+  fcmTokens: { type: [String], default: [] },
 });
 
 const User = mongoose.model("User", UserSchema);
