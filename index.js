@@ -10,8 +10,19 @@ const favoriteRoutes = require("./Routes/Sellproperty/Favorite");
 const userRoute = require("./Routes/Auth/User");
 const AdminuserRoute = require("./Routes/Auth/Admin");
 const EnquiryRoute = require("./Routes/Enquiry/Enquiry");
+const SubscriptionRoute = require("./Routes/Subscription/Subscription");
+const PaymentRoute = require("./Routes/Payment/Payment");
+const PaymentController = require("./Controller/Payment/Payment");
 
 const app = express();
+
+// Razorpay webhook MUST receive the raw body for signature verification, so it
+// is registered before the global express.json() parser.
+app.post(
+  "/api/payments/webhook",
+  express.raw({ type: "application/json" }),
+  (req, res) => PaymentController.webhook(req, res)
+);
 
 // Middleware
 app.use(express.json());
@@ -35,6 +46,8 @@ app.use("/api/sell", sellpropertyRoutes);
 app.use("/api/favorites", favoriteRoutes);
 app.use("/api/admin", AdminuserRoute);
 app.use("/api/enquiry", EnquiryRoute);
+app.use("/api/subscriptions", SubscriptionRoute);
+app.use("/api/payments", PaymentRoute);
 app.use("/api", userRoute);
 
 // Health check endpoint

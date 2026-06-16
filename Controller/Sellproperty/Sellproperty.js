@@ -1,4 +1,5 @@
 const Property = require("../../Model/Sellproperty/Sellproperty");
+const Payment = require("../../Model/Payment/Payment");
 const Enquiry = require("../../Model/Enquiry/Enquiry");
 const Favorite = require("../../Model/Sellproperty/Favorite.js");
 const { cloudinary } = require("../../Utils/cloudinary");
@@ -78,6 +79,23 @@ exports.createProperty = async (req, res) => {
       return res.status(400).json({ message: "Request body is empty" });
     }
     const propertyData = { ...req.body };
+
+    // Payment gate: a new listing requires a paid (unused) Razorpay order that
+    // belongs to this customer. The order id is consumed below so one ₹199
+    // payment maps to exactly one created property.
+    const razorpayOrderId = propertyData.razorpayOrderId;
+    delete propertyData.razorpayOrderId;
+    const paidOrder = await Payment.findOne({
+      orderId: razorpayOrderId,
+      customerId: propertyData.customerId,
+      status: "paid",
+    });
+    if (!paidOrder) {
+      return res.status(402).json({
+        message: "Payment required to upload a property.",
+      });
+    }
+
     [
       "amenities",
       "nearbyplace",
@@ -102,6 +120,12 @@ exports.createProperty = async (req, res) => {
     }
     const property = new Property(propertyData);
     await property.save();
+
+    // Consume the payment so it can't be reused for another listing.
+    paidOrder.status = "used";
+    paidOrder.propertyId = property._id;
+    await paidOrder.save();
+
     const savedProperty = await Property.findById(property._id);
     res.status(201).json({
       message: "Property created successfully",

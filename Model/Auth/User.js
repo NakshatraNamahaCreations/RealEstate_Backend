@@ -15,7 +15,13 @@ const UserSchema = new mongoose.Schema({
   resetPasswordExpires: { type: Date },
   // FCM device tokens (one per device) for push notifications.
   fcmTokens: { type: [String], default: [] },
-});
+  // Admin moderation: a blocked user is retained but can be barred from the app.
+  status: {
+    type: String,
+    enum: ["active", "blocked"],
+    default: "active",
+  },
+}, { timestamps: true });
 
 const User = mongoose.model("User", UserSchema);
 module.exports = User;

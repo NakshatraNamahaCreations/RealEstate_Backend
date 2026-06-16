@@ -43,30 +43,50 @@ const sendOtpSms = async (phonenumber, otp) => {
 
   const url = `${SMS_ENDPOINT}?${params.toString()}`;
 
+  // Verbose, secret-masked log of exactly what we send to the provider.
+  console.log("========== [SMS] REQUEST ==========");
+  console.log("[SMS] endpoint  :", SMS_ENDPOINT);
+  console.log("[SMS] number    :", toApiNumber(phonenumber));
+  console.log("[SMS] sender    :", process.env.SMS_SENDER_ID || "(missing)");
+  console.log("[SMS] template  :", process.env.SMS_TEMPLATE_ID || "(missing)");
+  console.log("[SMS] sms_type  :", process.env.SMS_TYPE || "T");
+  console.log("[SMS] encoding  :", process.env.SMS_ENCODING || "1");
+  console.log("[SMS] message   :", message);
+  console.log("[SMS] api_id    :", process.env.SMS_API_ID ? "set" : "(missing)");
+  console.log("[SMS] api_pass  :", process.env.SMS_API_PASSWORD ? "set" : "(missing)");
+  console.log("===================================");
+
   let res;
   try {
     res = await fetch(url, { method: "GET" });
   } catch (err) {
-    console.error("SMS request failed (network):", err.message);
+    console.error("[SMS] network error:", err.message);
     throw new Error("Failed to reach SMS provider");
   }
 
   const raw = await res.text();
+  // Always log the raw provider response — this is the key to diagnosing a
+  // "submitted but not delivered" case (DLT template/sender mismatch, balance,
+  // etc.). The HTTP status here is the provider's HTTP layer, not delivery.
+  console.log("[SMS] http status:", res.status);
+  console.log("[SMS] raw response:", raw);
+
   let body;
   try {
     body = JSON.parse(raw);
   } catch (_) {
-    console.error("SMS provider returned non-JSON:", res.status, raw.slice(0, 200));
+    console.error("[SMS] non-JSON response (see raw above)");
     throw new Error("Unexpected SMS provider response");
   }
 
   // Success is signalled by code 200 (some accounts return 201). Anything else
   // (e.g. 500 "Access Denied!") is a failure.
   if (Number(body.code) !== 200 && Number(body.code) !== 201) {
-    console.error("SMS provider rejected message:", body);
+    console.error("[SMS] provider rejected message:", body);
     throw new Error(body.message || "SMS provider rejected the message");
   }
 
+  console.log("[SMS] accepted by provider:", JSON.stringify(body));
   return body;
 };
 

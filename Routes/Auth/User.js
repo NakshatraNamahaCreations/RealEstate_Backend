@@ -13,6 +13,7 @@ router.post("/usersignin", UserController.UserSignin);
 router.post("/forgot-password", UserController.forgotPassword);
 router.post("/reset-password", UserController.resetPassword);
 router.get("/alluser", UserController.getAlluser);
+router.get("/userbyid/:userId", UserController.getUserById);
 router.put("/updateusers/:userId", UserController.updateUser);
 
 // Push notifications — register a device's FCM token.

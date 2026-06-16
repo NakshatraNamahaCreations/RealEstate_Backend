@@ -62,6 +62,18 @@ const PropertySchema = new mongoose.Schema(
     profession_Type: [{ type: String }],
     favorite: { type: Boolean, default: false },
     rera_id: { type: String },
+    // ---- Admin moderation fields ----
+    // Listings default to "approved" so existing app behaviour is unchanged;
+    // an admin can move a listing to "pending"/"rejected" to hide it.
+    approvalStatus: {
+      type: String,
+      enum: ["pending", "approved", "rejected"],
+      default: "approved",
+    },
+    // Promoted listings the admin wants surfaced first.
+    featured: { type: Boolean, default: false },
+    // Soft on/off switch independent of approval (e.g. temporarily delist).
+    isActive: { type: Boolean, default: true },
   },
   {
     timestamps: true,

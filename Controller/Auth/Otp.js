@@ -46,6 +46,12 @@ class OtpController {
       const otpHash = await bcrypt.hash(otp, 10);
       const expiresAt = new Date(Date.now() + OTP_EXP_MINUTES * 60 * 1000);
 
+      // DEV aid: print the OTP so you can complete login while SMS delivery is
+      // being sorted out. Suppressed when NODE_ENV=production.
+      if (process.env.NODE_ENV !== "production") {
+        console.log(`🔑 [DEV] OTP for ${phonenumber} = ${otp}`);
+      }
+
       await Otp.findOneAndUpdate(
         { phonenumber },
         { phonenumber, otpHash, expiresAt, attempts: 0, lastSentAt: new Date() },
@@ -55,12 +61,14 @@ class OtpController {
       try {
         await sendOtpSms(phonenumber, otp);
       } catch (smsError) {
-        console.error("Error sending OTP SMS:", smsError);
+        console.error("Error sending OTP SMS:", smsError.message);
         // Don't leave a usable OTP behind if delivery failed.
         await Otp.deleteOne({ phonenumber });
-        return res
-          .status(502)
-          .json({ status: false, message: "Failed to send OTP. Please try again." });
+        return res.status(502).json({
+          status: false,
+          // Surface the provider's reason so the cause is visible client-side too.
+          message: `Failed to send OTP: ${smsError.message}`,
+        });
       }
 
       return res.status(200).json({ status: true, message: "OTP sent successfully." });
