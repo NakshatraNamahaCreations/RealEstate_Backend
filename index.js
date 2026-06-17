@@ -13,6 +13,7 @@ const EnquiryRoute = require("./Routes/Enquiry/Enquiry");
 const SubscriptionRoute = require("./Routes/Subscription/Subscription");
 const PaymentRoute = require("./Routes/Payment/Payment");
 const PaymentController = require("./Controller/Payment/Payment");
+const NotificationRoute = require("./Routes/Notification/Notification");
 
 const app = express();
 
@@ -48,6 +49,7 @@ app.use("/api/admin", AdminuserRoute);
 app.use("/api/enquiry", EnquiryRoute);
 app.use("/api/subscriptions", SubscriptionRoute);
 app.use("/api/payments", PaymentRoute);
+app.use("/api/notifications", NotificationRoute);
 app.use("/api", userRoute);
 
 // Health check endpoint

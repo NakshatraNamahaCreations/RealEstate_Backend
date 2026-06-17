@@ -1,7 +1,8 @@
 const adminUser = require("../../Model/Auth/Admin");
 const bcrypt = require("bcrypt");
-const { sendToTopic } = require("../../Utils/fcm");
+const { sendToTopic, sendToUser } = require("../../Utils/fcm");
 const { signAdminToken } = require("../../Utils/jwt");
+const Notification = require("../../Model/Notification/Notification");
 
 // Emails permitted to self-register the FIRST super admin via /signup. Once an
 // admin exists, signup is locked to super admins (createAdmin) instead.
@@ -265,9 +266,65 @@ class AdminController {
 
       await sendToTopic("all", { title, body, data: { type: "broadcast" } });
 
+      // Persist one shared broadcast doc for the in-app inbox; it auto-deletes
+      // after 15 days via the TTL index on expiresAt.
+      await Notification.create({
+        audience: "all",
+        title,
+        body,
+        type: "broadcast",
+        expiresAt: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
+      });
+
       return res.status(200).json({ status: true, message: "Broadcast sent." });
     } catch (error) {
       console.error("Error in broadcast:", error);
+      return res
+        .status(500)
+        .json({ status: false, message: "Internal server error" });
+    }
+  }
+
+  // Targeted notification to one or more app users. Persists a per-user doc
+  // (no expiry — user-deletable) and pushes via FCM. Protected by requireAdmin.
+  async notifyUsers(req, res) {
+    try {
+      const { userIds, title, body } = req.body;
+      if (!Array.isArray(userIds) || userIds.length === 0 || !title || !body) {
+        return res.status(400).json({
+          status: false,
+          message: "userIds (non-empty), title and body are required.",
+        });
+      }
+
+      // Store inbox docs in one go.
+      await Notification.insertMany(
+        userIds.map((userId) => ({
+          audience: "user",
+          userId: String(userId),
+          title,
+          body,
+          type: "admin",
+        }))
+      );
+
+      // Best-effort push to each user's devices.
+      await Promise.all(
+        userIds.map((userId) =>
+          sendToUser(String(userId), {
+            title,
+            body,
+            data: { type: "admin" },
+          })
+        )
+      );
+
+      return res.status(200).json({
+        status: true,
+        message: `Notification sent to ${userIds.length} user(s).`,
+      });
+    } catch (error) {
+      console.error("Error in notifyUsers:", error);
       return res
         .status(500)
         .json({ status: false, message: "Internal server error" });

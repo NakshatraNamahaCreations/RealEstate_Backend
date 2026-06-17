@@ -24,8 +24,9 @@ router.put("/change-password", AdminController.changePassword);
 // Dashboard
 router.get("/dashboard/stats", AdminDashboard.getStats);
 
-// Push broadcast
+// Push broadcast + targeted notification
 router.post("/broadcast", AdminController.broadcast);
+router.post("/notify", AdminController.notifyUsers);
 
 // ---- App users ----
 router.get("/users", AdminUsers.listUsers);
