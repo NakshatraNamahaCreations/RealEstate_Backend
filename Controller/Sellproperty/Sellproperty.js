@@ -79,22 +79,23 @@ exports.createProperty = async (req, res) => {
       return res.status(400).json({ message: "Request body is empty" });
     }
     const propertyData = { ...req.body };
-
-    // Payment gate: a new listing requires a paid (unused) Razorpay order that
-    // belongs to this customer. The order id is consumed below so one ₹199
-    // payment maps to exactly one created property.
-    const razorpayOrderId = propertyData.razorpayOrderId;
+    // Ignore any payment field while uploads are free.
     delete propertyData.razorpayOrderId;
-    const paidOrder = await Payment.findOne({
-      orderId: razorpayOrderId,
-      customerId: propertyData.customerId,
-      status: "paid",
-    });
-    if (!paidOrder) {
-      return res.status(402).json({
-        message: "Payment required to upload a property.",
-      });
-    }
+
+    // ── Payment gate TEMPORARILY DISABLED — uploads are free for now. ──
+    // To re-enable ₹199-per-listing, uncomment this block (and the consume
+    // step below) plus the Flutter pay-then-upload flow in upload_images.dart.
+    // const razorpayOrderId = propertyData.razorpayOrderId;
+    // const paidOrder = await Payment.findOne({
+    //   orderId: razorpayOrderId,
+    //   customerId: propertyData.customerId,
+    //   status: "paid",
+    // });
+    // if (!paidOrder) {
+    //   return res.status(402).json({
+    //     message: "Payment required to upload a property.",
+    //   });
+    // }
 
     [
       "amenities",
@@ -121,10 +122,10 @@ exports.createProperty = async (req, res) => {
     const property = new Property(propertyData);
     await property.save();
 
-    // Consume the payment so it can't be reused for another listing.
-    paidOrder.status = "used";
-    paidOrder.propertyId = property._id;
-    await paidOrder.save();
+    // Payment consume step disabled while uploads are free (see gate above).
+    // paidOrder.status = "used";
+    // paidOrder.propertyId = property._id;
+    // await paidOrder.save();
 
     const savedProperty = await Property.findById(property._id);
     res.status(201).json({
