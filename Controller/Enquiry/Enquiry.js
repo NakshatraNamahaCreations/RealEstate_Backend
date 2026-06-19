@@ -1,7 +1,32 @@
 const Enquiry = require("../../Model/Enquiry/Enquiry");
 const Property = require("../../Model/Sellproperty/Sellproperty");
 const User = require("../../Model/Auth/User");
+const Notification = require("../../Model/Notification/Notification");
 const { sendToUser } = require("../../Utils/fcm");
+
+// Persist a per-user notification (shows in the in-app inbox, user-deletable,
+// no auto-expiry) AND push it via FCM. Best-effort: never throws to the caller
+// so a notification failure can't break the enquiry action.
+async function notifyUser(userId, { title, body, data }) {
+  if (!userId) return;
+  try {
+    await Notification.create({
+      audience: "user",
+      userId: String(userId),
+      title,
+      body,
+      type: (data && data.type) || "enquiry",
+      data,
+    });
+  } catch (e) {
+    console.error("notifyUser persist failed:", e.message);
+  }
+  try {
+    await sendToUser(String(userId), { title, body, data });
+  } catch (e) {
+    console.error("notifyUser push failed:", e.message);
+  }
+}
 
 exports.createEnquiry = async (req, res) => {
   try {
@@ -46,11 +71,11 @@ exports.createEnquiry = async (req, res) => {
       throw saveErr;
     }
 
-    // Notify the property owner about the new enquiry (best-effort).
+    // Notify the property owner about the new enquiry (inbox + push).
     try {
       const property = await Property.findById(propertyId).select("customerId");
       if (property && property.customerId) {
-        await sendToUser(property.customerId, {
+        await notifyUser(property.customerId, {
           title: "New enquiry",
           body: newEnquiry.message
             ? `${userName}: ${newEnquiry.message}`
@@ -138,8 +163,8 @@ exports.acceptEnquiry = async (req, res) => {
       return res.status(404).json({ message: "Enquiry not found." });
     }
 
-    // Notify the enquirer that their enquiry was accepted (best-effort).
-    sendToUser(updatedEnquiry.userId, {
+    // Notify the enquirer that their enquiry was accepted (inbox + push).
+    await notifyUser(updatedEnquiry.userId, {
       title: "Enquiry accepted",
       body: "Your enquiry has been accepted.",
       data: { type: "enquiry_status", enquiryId: String(updatedEnquiry._id), status: "accept" },
@@ -171,8 +196,8 @@ exports.rejectEnquiry = async (req, res) => {
       return res.status(404).json({ message: "Enquiry not found." });
     }
 
-    // Notify the enquirer that their enquiry was declined (best-effort).
-    sendToUser(updatedEnquiry.userId, {
+    // Notify the enquirer that their enquiry was declined (inbox + push).
+    await notifyUser(updatedEnquiry.userId, {
       title: "Enquiry declined",
       body: "Your enquiry has been declined.",
       data: { type: "enquiry_status", enquiryId: String(updatedEnquiry._id), status: "reject" },
