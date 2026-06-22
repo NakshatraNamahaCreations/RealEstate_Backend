@@ -12,6 +12,7 @@ function propertyLabel(p) {
   return p.city ? `${kind} in ${p.city}` : kind;
 }
 
+// test
 // Persist a per-user notification (shows in the in-app inbox, user-deletable,
 // no auto-expiry) AND push it via FCM. Best-effort: never throws to the caller
 // so a notification failure can't break the enquiry action.
@@ -82,7 +83,7 @@ exports.createEnquiry = async (req, res) => {
     // Notify the property owner about the new enquiry (inbox + push).
     try {
       const property = await Property.findById(propertyId).select(
-        "customerId propertytype residentialtype commercialtype city"
+        "customerId propertytype residentialtype commercialtype city",
       );
       if (property && property.customerId) {
         const label = propertyLabel(property);
@@ -167,7 +168,7 @@ exports.acceptEnquiry = async (req, res) => {
     const updatedEnquiry = await Enquiry.findByIdAndUpdate(
       enquiryId,
       { status: "accept" },
-      { new: true }
+      { new: true },
     );
 
     if (!updatedEnquiry) {
@@ -176,7 +177,7 @@ exports.acceptEnquiry = async (req, res) => {
 
     // Notify the enquirer that their enquiry was accepted (inbox + push).
     const acProp = await Property.findById(updatedEnquiry.propertyId).select(
-      "propertytype residentialtype commercialtype city"
+      "propertytype residentialtype commercialtype city",
     );
     await notifyUser(updatedEnquiry.userId, {
       title: "Enquiry accepted",
@@ -208,7 +209,7 @@ exports.rejectEnquiry = async (req, res) => {
     const updatedEnquiry = await Enquiry.findByIdAndUpdate(
       enquiryId,
       { status: "reject" },
-      { new: true }
+      { new: true },
     );
 
     if (!updatedEnquiry) {
@@ -217,7 +218,7 @@ exports.rejectEnquiry = async (req, res) => {
 
     // Notify the enquirer that their enquiry was declined (inbox + push).
     const rjProp = await Property.findById(updatedEnquiry.propertyId).select(
-      "propertytype residentialtype commercialtype city"
+      "propertytype residentialtype commercialtype city",
     );
     await notifyUser(updatedEnquiry.userId, {
       title: "Enquiry declined",
@@ -244,10 +245,12 @@ exports.rejectEnquiry = async (req, res) => {
 
 exports.getAcceptedEnquiries = async (req, res) => {
   try {
-    const acceptedEnquiries = await Enquiry.find({ status: "accept" }).populate({
-      path: "propertyId",
-      model: Property,
-    });
+    const acceptedEnquiries = await Enquiry.find({ status: "accept" }).populate(
+      {
+        path: "propertyId",
+        model: Property,
+      },
+    );
 
     if (!acceptedEnquiries.length) {
       return res.status(404).json({ message: "No accepted enquiries found." });
@@ -267,10 +270,12 @@ exports.getAcceptedEnquiries = async (req, res) => {
 
 exports.getRejectedEnquiries = async (req, res) => {
   try {
-    const rejectedEnquiries = await Enquiry.find({ status: "reject" }).populate({
-      path: "propertyId",
-      model: Property,
-    });
+    const rejectedEnquiries = await Enquiry.find({ status: "reject" }).populate(
+      {
+        path: "propertyId",
+        model: Property,
+      },
+    );
 
     if (!rejectedEnquiries.length) {
       return res.status(404).json({ message: "No rejected enquiries found." });
