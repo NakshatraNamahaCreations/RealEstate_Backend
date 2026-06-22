@@ -4,6 +4,14 @@ const User = require("../../Model/Auth/User");
 const Notification = require("../../Model/Notification/Notification");
 const { sendToUser } = require("../../Utils/fcm");
 
+// Short human label for a property, e.g. "Flat in Mysore".
+function propertyLabel(p) {
+  if (!p) return "your property";
+  const kind =
+    p.residentialtype || p.commercialtype || p.propertytype || "property";
+  return p.city ? `${kind} in ${p.city}` : kind;
+}
+
 // Persist a per-user notification (shows in the in-app inbox, user-deletable,
 // no auto-expiry) AND push it via FCM. Best-effort: never throws to the caller
 // so a notification failure can't break the enquiry action.
@@ -73,13 +81,16 @@ exports.createEnquiry = async (req, res) => {
 
     // Notify the property owner about the new enquiry (inbox + push).
     try {
-      const property = await Property.findById(propertyId).select("customerId");
+      const property = await Property.findById(propertyId).select(
+        "customerId propertytype residentialtype commercialtype city"
+      );
       if (property && property.customerId) {
+        const label = propertyLabel(property);
         await notifyUser(property.customerId, {
           title: "New enquiry",
           body: newEnquiry.message
-            ? `${userName}: ${newEnquiry.message}`
-            : `${userName} enquired about your property`,
+            ? `${userName} on your ${label}: ${newEnquiry.message}`
+            : `${userName} enquired about your ${label}`,
           data: { type: "new_enquiry", propertyId: String(propertyId) },
         });
       }
@@ -164,10 +175,18 @@ exports.acceptEnquiry = async (req, res) => {
     }
 
     // Notify the enquirer that their enquiry was accepted (inbox + push).
+    const acProp = await Property.findById(updatedEnquiry.propertyId).select(
+      "propertytype residentialtype commercialtype city"
+    );
     await notifyUser(updatedEnquiry.userId, {
       title: "Enquiry accepted",
-      body: "Your enquiry has been accepted.",
-      data: { type: "enquiry_status", enquiryId: String(updatedEnquiry._id), status: "accept" },
+      body: `Your enquiry for ${propertyLabel(acProp)} has been accepted.`,
+      data: {
+        type: "enquiry_status",
+        enquiryId: String(updatedEnquiry._id),
+        propertyId: String(updatedEnquiry.propertyId),
+        status: "accept",
+      },
     });
 
     res.status(200).json({
@@ -197,10 +216,18 @@ exports.rejectEnquiry = async (req, res) => {
     }
 
     // Notify the enquirer that their enquiry was declined (inbox + push).
+    const rjProp = await Property.findById(updatedEnquiry.propertyId).select(
+      "propertytype residentialtype commercialtype city"
+    );
     await notifyUser(updatedEnquiry.userId, {
       title: "Enquiry declined",
-      body: "Your enquiry has been declined.",
-      data: { type: "enquiry_status", enquiryId: String(updatedEnquiry._id), status: "reject" },
+      body: `Your enquiry for ${propertyLabel(rjProp)} has been declined.`,
+      data: {
+        type: "enquiry_status",
+        enquiryId: String(updatedEnquiry._id),
+        propertyId: String(updatedEnquiry.propertyId),
+        status: "reject",
+      },
     });
 
     res.status(200).json({
@@ -292,27 +319,23 @@ exports.getEnquiriesByCustomerId = async (req, res) => {
       return res.status(400).json({ message: "customerId is required." });
     }
 
-    const enquiries = await Enquiry.find().populate({
-      path: "propertyId",
-      model: Property,
-      match: { customerId: customerId },
+    // Start from ALL properties this customer owns (newest first) so every
+    // listing shows on the dashboard — even ones with zero enquiries.
+    const properties = await Property.find({ customerId }).sort({
+      createdAt: -1,
     });
 
-    // Keep only enquiries whose property belongs to this owner.
-    const validEnquiries = enquiries.filter(
-      (enquiry) => enquiry.propertyId !== null
-    );
+    // Pull enquiries for those properties and bucket them by property id.
+    const propertyIds = properties.map((p) => p._id);
+    const enquiries = await Enquiry.find({
+      propertyId: { $in: propertyIds },
+    });
 
-    // Group enquiries by property into { property, users: [...] } so the app can
-    // render one card per property with the list of enquirers underneath.
-    const grouped = new Map();
-    for (const e of validEnquiries) {
-      const property = e.propertyId;
-      const key = String(property._id);
-      if (!grouped.has(key)) {
-        grouped.set(key, { property, users: [] });
-      }
-      grouped.get(key).users.push({
+    const usersByProperty = new Map();
+    for (const e of enquiries) {
+      const key = String(e.propertyId);
+      if (!usersByProperty.has(key)) usersByProperty.set(key, []);
+      usersByProperty.get(key).push({
         enquiryId: String(e._id),
         userId: e.userId,
         userName: e.userName,
@@ -322,17 +345,14 @@ exports.getEnquiriesByCustomerId = async (req, res) => {
       });
     }
 
-    const data = Array.from(grouped.values());
-
-    if (!data.length) {
-      return res.status(404).json({
-        message: "No enquiries found for the given customerId.",
-        data: [],
-      });
-    }
+    // One { property, users } entry per owned property (users may be empty).
+    const data = properties.map((property) => ({
+      property,
+      users: usersByProperty.get(String(property._id)) || [],
+    }));
 
     res.status(200).json({
-      message: "Enquiries and associated properties fetched successfully",
+      message: "Properties and associated enquiries fetched successfully",
       data,
     });
   } catch (error) {
