@@ -9,6 +9,12 @@ const OTP_EXP_MINUTES = Number(process.env.OTP_EXP_MINUTES) || 5;
 const RESEND_COOLDOWN_MS = 30 * 1000; // min gap between sends for a number
 const MAX_VERIFY_ATTEMPTS = 5;
 
+// Fixed credential for Play Store / app-store reviewers, who can't receive a
+// real OTP SMS. Sending to this number skips SMS, and this exact code always
+// verifies. Override or disable via env in production if desired.
+const TEST_PHONE = process.env.TEST_OTP_PHONE || "1234567890";
+const TEST_OTP = process.env.TEST_OTP_CODE || "123456";
+
 const isValidPhone = (p) => /^\d{10}$/.test(String(p || "").trim());
 
 // Cryptographically-random numeric code of OTP_LENGTH digits, zero-padded.
@@ -27,6 +33,14 @@ class OtpController {
         return res
           .status(400)
           .json({ status: false, message: "A valid 10-digit phone number is required." });
+      }
+
+      // Reviewer test number: pretend the OTP was sent (no real SMS). The fixed
+      // code is accepted directly in verifyOtp.
+      if (phonenumber === TEST_PHONE) {
+        return res
+          .status(200)
+          .json({ status: true, message: "OTP sent successfully." });
       }
 
       // Throttle resends.
@@ -91,32 +105,40 @@ class OtpController {
           .json({ status: false, message: "Phone number and OTP are required." });
       }
 
-      const record = await Otp.findOne({ phonenumber });
+      // Reviewer test credential: accept the fixed code without an SMS round
+      // trip, then fall through to the normal find-or-create + response below.
+      const isTestLogin = phonenumber === TEST_PHONE && otp === TEST_OTP;
+      if (!isTestLogin) {
+        const record = await Otp.findOne({ phonenumber });
 
-      if (!record || new Date(record.expiresAt).getTime() < Date.now()) {
-        return res
-          .status(400)
-          .json({ status: false, message: "OTP is invalid or has expired." });
-      }
+        if (!record || new Date(record.expiresAt).getTime() < Date.now()) {
+          return res
+            .status(400)
+            .json({ status: false, message: "OTP is invalid or has expired." });
+        }
 
-      if (record.attempts >= MAX_VERIFY_ATTEMPTS) {
+        if (record.attempts >= MAX_VERIFY_ATTEMPTS) {
+          await Otp.deleteOne({ phonenumber });
+          return res.status(429).json({
+            status: false,
+            message: "Too many incorrect attempts. Please request a new OTP.",
+          });
+        }
+
+        const isMatch = await bcrypt.compare(otp, record.otpHash);
+        if (!isMatch) {
+          record.attempts += 1;
+          await record.save();
+          return res
+            .status(400)
+            .json({ status: false, message: "Incorrect OTP." });
+        }
+
+        // Consume the OTP on success.
         await Otp.deleteOne({ phonenumber });
-        return res.status(429).json({
-          status: false,
-          message: "Too many incorrect attempts. Please request a new OTP.",
-        });
       }
 
-      const isMatch = await bcrypt.compare(otp, record.otpHash);
-      if (!isMatch) {
-        record.attempts += 1;
-        await record.save();
-        return res.status(400).json({ status: false, message: "Incorrect OTP." });
-      }
-
-      // Success — consume the OTP and find-or-create the user by phone.
-      await Otp.deleteOne({ phonenumber });
-
+      // Find-or-create the user by phone (same for real and test logins).
       let user = await User.findOne({ phonenumber });
       if (!user) {
         user = await User.create({ phonenumber });
