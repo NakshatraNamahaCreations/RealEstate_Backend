@@ -5,6 +5,7 @@ const NotificationController = require("../../Controller/Notification/Notificati
 // App-facing inbox endpoints (userId in the request, consistent with the
 // rest of the app's unauthenticated user APIs).
 router.get("/:userId", NotificationController.getForUser);
+router.post("/delete-many", NotificationController.deleteManyForUser);
 router.delete("/:id", NotificationController.deleteForUser);
 
 module.exports = router;

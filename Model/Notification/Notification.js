@@ -16,6 +16,8 @@ const NotificationSchema = new mongoose.Schema(
     // Only set on broadcasts. Mongo's TTL monitor ignores docs where the field
     // is missing/null, so targeted notifications never auto-expire.
     expiresAt: { type: Date },
+    // Broadcasts are shared, so "deleting" one hides it for that user only.
+    hiddenFor: { type: [String], default: undefined },
   },
   { timestamps: true }
 );

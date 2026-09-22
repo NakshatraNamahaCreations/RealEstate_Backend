@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Notification = require("../../Model/Notification/Notification");
 
 class NotificationController {
@@ -12,8 +13,13 @@ class NotificationController {
       }
 
       const items = await Notification.find({
-        $or: [{ audience: "user", userId }, { audience: "all" }],
-      }).sort({ createdAt: -1 });
+        $or: [
+          { audience: "user", userId },
+          { audience: "all", hiddenFor: { $ne: userId } },
+        ],
+      })
+        .select("-hiddenFor")
+        .sort({ createdAt: -1 });
 
       return res.status(200).json({ status: true, data: items });
     } catch (error) {
@@ -55,6 +61,44 @@ class NotificationController {
       return res
         .status(500)
         .json({ status: false, message: "Failed to delete notification." });
+    }
+  }
+
+  // Bulk delete from the user's inbox: body { userId, ids: [...] }.
+  // Targeted notifications they own are deleted; broadcasts are hidden for
+  // this user only (the shared doc stays for everyone else).
+  async deleteManyForUser(req, res) {
+    try {
+      const { userId, ids } = req.body || {};
+      if (!userId || !Array.isArray(ids) || ids.length === 0) {
+        return res
+          .status(400)
+          .json({ status: false, message: "userId and ids are required." });
+      }
+      const validIds = ids.filter((id) => mongoose.isValidObjectId(id));
+
+      const [deleted, hidden] = await Promise.all([
+        Notification.deleteMany({
+          _id: { $in: validIds },
+          audience: "user",
+          userId,
+        }),
+        Notification.updateMany(
+          { _id: { $in: validIds }, audience: "all" },
+          { $addToSet: { hiddenFor: userId } }
+        ),
+      ]);
+
+      return res.status(200).json({
+        status: true,
+        message: "Deleted.",
+        count: deleted.deletedCount + hidden.modifiedCount,
+      });
+    } catch (error) {
+      console.error("deleteManyForUser error:", error);
+      return res
+        .status(500)
+        .json({ status: false, message: "Failed to delete notifications." });
     }
   }
 }
