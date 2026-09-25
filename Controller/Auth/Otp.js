@@ -13,7 +13,9 @@ const MAX_VERIFY_ATTEMPTS = 5;
 // real OTP SMS. Sending to this number skips SMS, and this exact code always
 // verifies. Override or disable via env in production if desired.
 const TEST_PHONE = process.env.TEST_OTP_PHONE || "1234567890";
-const TEST_OTP = process.env.TEST_OTP_CODE || "123456";
+// Defaults to the first OTP_LENGTH digits of 123456 so it always fits the
+// app's OTP boxes (e.g. "1234" when OTP_LENGTH=4).
+const TEST_OTP = process.env.TEST_OTP_CODE || "123456".slice(0, OTP_LENGTH);
 
 const isValidPhone = (p) => /^\d{10}$/.test(String(p || "").trim());
 
@@ -40,7 +42,7 @@ class OtpController {
       if (phonenumber === TEST_PHONE) {
         return res
           .status(200)
-          .json({ status: true, message: "OTP sent successfully." });
+          .json({ status: true, message: "OTP sent successfully.", otpLength: OTP_LENGTH });
       }
 
       // Throttle resends.
@@ -85,7 +87,7 @@ class OtpController {
         });
       }
 
-      return res.status(200).json({ status: true, message: "OTP sent successfully." });
+      return res.status(200).json({ status: true, message: "OTP sent successfully.", otpLength: OTP_LENGTH });
     } catch (error) {
       console.error("Error in sendOtp:", error);
       return res

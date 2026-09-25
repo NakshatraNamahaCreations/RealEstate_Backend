@@ -140,7 +140,7 @@ exports.createProperty = async (req, res) => {
 
 exports.updateProperty = async (req, res) => {
   const { id } = req.params;
-  const customerId = req.body.customerId || req.query.customerId;
+  const customerId = (req.body && req.body.customerId) || req.query.customerId;
   try {
     if (!customerId) {
       return res
@@ -213,7 +213,7 @@ exports.updateProperty = async (req, res) => {
 
 exports.deleteProperty = async (req, res) => {
   const { id } = req.params;
-  const customerId = req.body.customerId || req.query.customerId;
+  const customerId = (req.body && req.body.customerId) || req.query.customerId;
   try {
     if (!customerId) {
       return res
