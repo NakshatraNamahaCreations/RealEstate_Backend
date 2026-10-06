@@ -49,6 +49,17 @@ class NotificationController {
       });
 
       if (result.deletedCount === 0) {
+        // Explain the miss: not found, a broadcast, or owned by someone else.
+        const doc = mongoose.isValidObjectId(id)
+          ? await Notification.findById(id).select("audience userId").lean()
+          : null;
+        console.warn("[notifications] deleteForUser: nothing deleted", {
+          id,
+          userId,
+          found: !!doc,
+          audience: doc && doc.audience,
+          ownerUserId: doc && doc.userId,
+        });
         return res.status(403).json({
           status: false,
           message: "This notification can't be deleted.",
@@ -71,11 +82,16 @@ class NotificationController {
     try {
       const { userId, ids } = req.body || {};
       if (!userId || !Array.isArray(ids) || ids.length === 0) {
+        console.warn("[notifications] deleteMany: bad request body", req.body);
         return res
           .status(400)
           .json({ status: false, message: "userId and ids are required." });
       }
       const validIds = ids.filter((id) => mongoose.isValidObjectId(id));
+      if (validIds.length !== ids.length) {
+        console.warn("[notifications] deleteMany: invalid ids skipped",
+          ids.filter((id) => !validIds.includes(id)));
+      }
 
       const [deleted, hidden] = await Promise.all([
         Notification.deleteMany({
@@ -89,10 +105,35 @@ class NotificationController {
         ),
       ]);
 
+      const count = deleted.deletedCount + hidden.modifiedCount;
+      console.log("[notifications] deleteMany result", {
+        userId,
+        requested: ids.length,
+        deletedTargeted: deleted.deletedCount,
+        hiddenBroadcasts: hidden.modifiedCount,
+      });
+      if (count < validIds.length) {
+        // Some ids matched nothing for this user — log what they actually are.
+        const docs = await Notification.find({ _id: { $in: validIds } })
+          .select("audience userId hiddenFor")
+          .lean();
+        console.warn("[notifications] deleteMany: some ids not removed", {
+          notFound: validIds.filter(
+            (id) => !docs.some((d) => String(d._id) === String(id))
+          ),
+          remaining: docs.map((d) => ({
+            id: String(d._id),
+            audience: d.audience,
+            ownerUserId: d.userId,
+            alreadyHidden: (d.hiddenFor || []).includes(userId),
+          })),
+        });
+      }
+
       return res.status(200).json({
         status: true,
         message: "Deleted.",
-        count: deleted.deletedCount + hidden.modifiedCount,
+        count,
       });
     } catch (error) {
       console.error("deleteManyForUser error:", error);
