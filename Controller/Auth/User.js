@@ -2,6 +2,7 @@ const User = require("../../Model/Auth/User");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const { sendPasswordResetEmail } = require("../../Utils/mailer");
+const { cloudinary } = require("../../Utils/cloudinary");
 
 const hashToken = (token) =>
   crypto.createHash("sha256").update(token).digest("hex");
@@ -149,11 +150,55 @@ class UserController {
           gender: user.gender,
           professional: user.professional,
           socialmedialink: user.socialmedialink,
+          profileImage: user.profileImage || "",
         },
       });
     } catch (error) {
       console.error("Error updating user:", error);
       return res.status(500).json({ message: "Internal server error" });
+    }
+  }
+
+  // POST /userprofileimage/:userId (multipart, field "profileimage").
+  // Multer has already uploaded the file to Cloudinary; save its URL and
+  // remove the previous photo.
+  async uploadProfileImage(req, res) {
+    try {
+      const { userId } = req.params;
+      if (!req.file) {
+        return res
+          .status(400)
+          .json({ status: false, message: "No image file received." });
+      }
+
+      const user = await User.findById(userId);
+      if (!user) {
+        // Don't leave an orphaned upload behind.
+        cloudinary.uploader.destroy(req.file.filename).catch(() => {});
+        return res.status(404).json({ status: false, message: "User not found." });
+      }
+
+      const oldUrl = user.profileImage;
+      user.profileImage = req.file.path; // Cloudinary secure URL
+      await user.save();
+
+      // Best-effort cleanup of the replaced photo.
+      const oldId = oldUrl && oldUrl.match(/\/upload\/(?:v\d+\/)?(.+)\.[a-z0-9]+$/i);
+      if (oldId) {
+        cloudinary.uploader.destroy(oldId[1]).catch((e) =>
+          console.error("Old profile image cleanup failed:", e.message)
+        );
+      }
+
+      console.log("[profileImage] updated for", userId);
+      return res.status(200).json({
+        status: true,
+        message: "Profile photo updated.",
+        data: { profileImage: user.profileImage },
+      });
+    } catch (error) {
+      console.error("Error uploading profile image:", error);
+      return res.status(500).json({ status: false, message: "Internal server error" });
     }
   }
 

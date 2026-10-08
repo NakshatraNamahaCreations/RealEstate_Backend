@@ -18,4 +18,17 @@ const propertyStorage = new CloudinaryStorage({
   }),
 });
 
-module.exports = { cloudinary, propertyStorage };
+// User profile photos (one per user; the old one is removed on replace).
+const profileStorage = new CloudinaryStorage({
+  cloudinary,
+  params: async (req, file) => ({
+    folder: "30forty/profile",
+    resource_type: "image",
+    public_id: `${req.params.userId}-${Date.now()}`,
+    allowed_formats: ["jpg", "jpeg", "png", "webp"],
+    // Avatars are shown small — store a 512px square, face-centred crop.
+    transformation: [{ width: 512, height: 512, crop: "fill", gravity: "face" }],
+  }),
+});
+
+module.exports = { cloudinary, propertyStorage, profileStorage };

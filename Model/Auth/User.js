@@ -11,6 +11,8 @@ const UserSchema = new mongoose.Schema({
   gender: { type: String },
   professional: { type: String },
   socialmedialink: { type: String },
+  // Cloudinary URL of the user's profile photo (empty = default avatar).
+  profileImage: { type: String },
   resetPasswordToken: { type: String },
   resetPasswordExpires: { type: Date },
   // FCM device tokens (one per device) for push notifications.
